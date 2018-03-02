@@ -1,0 +1,16 @@
+if did_filetype()
+    finish
+endif
+if getline(1) =~ 'sh'
+    set filetype=sh
+        finish
+endif
+fun! s:DetectFileType()
+	if getline(1) == '#!/usr/bin/env python'
+		set ft=python
+	elseif getline(1) == '#!/usr/bin/env julia'
+		set ft=julia
+	endif
+endfun
+
+autocmd BufNewFile,BufRead * call s:DetectFileType()

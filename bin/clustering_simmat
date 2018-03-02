@@ -1,0 +1,135 @@
+#!/usr/bin/env python
+import numpy as np
+import sys, os
+import datetime
+import subprocess
+from scipy import io
+from scipy.sparse import lil_matrix, coo_matrix
+scriptdir  = os.path.dirname(sys.argv[0])
+projectdir = os.path.dirname(scriptdir)
+sys.path.append(os.path.join(projectdir, "chaldea"))
+coprafile  = os.path.join(projectdir, "chaldea", "copra.sh")
+print("coprafile: ", coprafile)
+from OpticsAutomaticClustering import *
+# Compatible with both Python2 and Python3
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
+import click
+import subprocess 
+
+@click.command()
+@click.argument("simmat_file", type=click.Path(exists=True))
+@click.option("--MinPts", type=int, default=10, help="MinPts used in OPTICS.")
+@click.option("--v", type=int, default=2, help="v used in COPRA.")
+def cmd(simmat_file, minpts, v):
+    #sys.stdout = mystdout = StringIO()
+    d = datetime.datetime.today()
+    simmat_file = os.path.abspath(simmat_file)
+    simmat_dir  = os.path.dirname(simmat_file)
+    save_dir    = os.path.join(simmat_dir, "clusters_MinPts"+str(minpts)+"_v"+str(v)+"_"+d.strftime("%y%m%dT%H%M%S"))
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+    prev_wd = os.getcwd() 
+    os.chdir(projectdir) 
+
+    print("load start")
+    binarray_file = os.path.join(os.path.dirname(simmat_dir), "binarray_data.npz")
+    binarray_data = np.load(binarray_file)
+    row = binarray_data["row"]
+    col = binarray_data["col"]
+    # Needs to be fixed
+    # data = binarray_data["data"]
+    data = binarray_data["data"] - 1
+    binsize = binarray_data["binsize(ms)"]
+    binarray_coo = coo_matrix((data, (row, col)))
+    print("binarray shape", binarray_coo.shape)
+    print("binarray load finish... start loading of simmat and parameters...")
+    paramfile = os.path.join(simmat_dir, "parameters.npz")
+    if os.path.isfile(paramfile):
+        parameters = np.load(paramfile)
+        window = parameters["window(ms)"]
+        slidewidth = parameters["slide(ms)"]
+        window_num = window // binsize
+        slidewidth = slidewidth // binsize
+    else:
+        sys.exit("Parameters file doesn't exists...Please check your input.")
+    correspondence_table_file      = os.path.join(simmat_dir, "correspondence_table.npz")
+    reduced_simmat_file            = os.path.join(save_dir, "reduced_simmat.mtx")
+    rereduced_simmat_file          = os.path.join(save_dir, "rereduced_simmat.mtx")
+    correspondence_table_time_file = os.path.join(save_dir, "correspondence_table_time.npz")
+    if not os.path.isfile(reduced_simmat_file):
+        print("reduced file doesn't exists... start reduction")
+        simmat_data = np.load(simmat_file)
+        row = simmat_data["row"]
+        col = simmat_data["col"]
+        data = simmat_data["data"]
+        print("data's shape: ", data.shape)
+        simmat_lil = coo_matrix((data, (row, col))).tolil()
+        simmat_csr = simmat_lil.tocsr()
+        simmat_csc = simmat_lil.tocsc()
+        print("simmat shape", simmat_lil.shape)
+        # simmatを圧縮する．行も列も要素がないものは除いてしまう
+        rows_must_remain = [row for row in range(simmat_csr.shape[0]) if simmat_csr[row, :].sum() != 0 and simmat_csc[:, row].sum() != 0]
+        reduced_simmat = np.zeros((len(rows_must_remain), len(rows_must_remain)))
+        correspondence_table = np.zeros(len(rows_must_remain))
+        for (idx1, row1) in enumerate(rows_must_remain):
+            correspondence_table[idx1] = row1
+            for (idx2, row2) in enumerate(rows_must_remain):
+                reduced_simmat[idx1, idx2] = simmat_lil[row1, row2]
+        io.mmwrite(reduced_simmat_file, lil_matrix(reduced_simmat))
+        np.savez(correspondence_table_file, correspondence_table)
+        print("reduced_simmat shape", reduced_simmat.shape)
+    else:
+        print("reduced file exists... load it.")
+        reduced_simmat = io.mmread(reduced_simmat_file).toarray()
+        correspondence_table = np.load(correspondence_table_file)["arr_0"]
+        print("reduced_simmat shape", reduced_simmat.shape)
+    # reduced_simmatを対称行列の形に変換する
+    # 本来は元から対象行列のはずであるが，LSHのせいでそうならないためである
+    reduced_simmat += reduced_simmat.T - np.diag(np.diag(reduced_simmat))
+    print(reduced_simmat)
+    # 距離行列を定義しておく．Opticsで用いるため
+    reduced_distmat = (1 / (1 + reduced_simmat))
+    # distmat = simmat.max() - simmat
+    print("OPTICS start")
+    optics = OpticsAutomaticClustering(smoothing=1,
+                                       epsilon=reduced_distmat.max(),
+                                       MinPts=minpts)
+    optics.fit(reduced_distmat)
+    core_samples = list()
+    for sample_array in optics.core_samples:
+        tmp = [a for a in sample_array]
+        core_samples += tmp
+    print('num of clusters', len(optics.core_samples), 'num of total member in clusters', len(core_samples))
+    # opticsの結果を用いて次元を削減した行列を作る
+    reduced_size = len(core_samples)
+    # print("correspondence_table... check it out: ", correspondence_table)
+    # rereduced simmatと実際の時刻との対応関係を記録する...ややこしや
+    correspondence_table_time = np.zeros(reduced_size)
+    rereduced_simmat = np.zeros((reduced_size, reduced_size))
+    # 安直な実装
+    for i in range(reduced_size):
+        row = core_samples[i]
+        correspondence_table_time[i] = correspondence_table[row]
+        # print("correspondence_table_time: ", correspondence_table_time)
+        for j in range(reduced_size):
+            col = core_samples[j]
+            rereduced_simmat[i, j] = reduced_simmat[row, col]
+
+    #os.chdir(prev_wd)
+    np.savez(correspondence_table_time_file, correspondence_table_time)
+    io.mmwrite(rereduced_simmat_file, lil_matrix(rereduced_simmat))
+    with open(os.path.join(save_dir, "log.txt"), "w") as wf:
+        wf.write("GitHEAD_ID: "+
+                subprocess.check_output([coprafile, rereduced_simmat_file, save_dir, str(v)]).decode("utf-8"))
+        wf.write("GeneratedFrom: "+sys.argv[0]+"\n")
+        #wf.write(mystdout.getvalue())
+    # Return stdout to the origin
+    #sys.stdout = sys.__stdout__
+    print(save_dir)
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()

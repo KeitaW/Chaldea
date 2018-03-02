@@ -1,0 +1,381 @@
+#!/usr/bin/env python
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['svg.fonttype'] = 'none'
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_context("paper", font_scale=2)
+sns.set_style("white")
+import svgutils.transform as sg
+from svgutils.transform import fromfile, from_mpl
+from svgutils.compose import *
+from svgutils.templates import *
+import sys, os
+import re
+import datetime
+import scipy.fftpack
+from scipy import signal
+import json
+from pylab import get_cmap
+from scipy import stats
+from itertools import chain
+import pandas as pd
+from itertools import cycle
+from scipy import io
+import matplotlib.gridspec as gridspec
+from sklearn.manifold import Isomap
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import os, sys
+script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+print(script_dir)
+sys.path.append(os.path.join(script_dir, "chaldea/utils"))
+sys.path.append(os.path.join(script_dir, "chaldea"))
+print(sys.path)
+import myutils
+
+a4_width_cm = 21 
+a4_height_cm = 29.7
+def cm2inch(*tupl):
+    inch = 2.54 # cm/inch
+    if isinstance(tupl[0], tuple):
+        return tuple(i/inch for i in tupl[0])
+    else:
+        return tuple(i/inch for i in tupl)
+def cm2px(*tupl):
+    px = 0.0353  # px/cm
+    if isinstance(tupl[0], tuple):
+        return tuple(i/px for i in tupl[0])
+    else:
+        return tuple(i/px for i in tupl)
+    
+def add_label(figfile, fig_width, fig_height, label, loc=(15, 20), labelsize=12, outname="fig"):
+    savedir = os.path.dirname(figfile)
+    fig = sg.SVGFigure(str(fig_width)+"cm", str(fig_height)+"cm")
+    figA = sg.fromfile(figfile)
+    # get the plot objects
+    plot1 = figA.getroot()
+    # add text labels
+    txt1 = sg.TextElement(loc[0], loc[1], label, size=labelsize, weight="bold")
+    fig.append([plot1])
+    fig.append([txt1])
+    # save generated SVG files
+    fig.save(os.path.join(savedir, outname+str(label)+".svg"))
+    
+def combine_horizontally(figfile1, figfile2, figwidth1, figheight1, figwidth2, figheight2, outfile="out.svg"):
+    #create new SVG figure
+    fig = sg.SVGFigure(str(figwidth1+figwidth2)+"cm", str(max(figheight1, figheight2))+"cm")
+    savedir = os.path.dirname(figfile1)
+    # load matpotlib-generated figures
+    fig1 = sg.fromfile(figfile1)
+    fig2 = sg.fromfile(figfile2)
+    # get the plot objects
+    plot1 = fig1.getroot()
+    plot2 = fig2.getroot()
+    plot1.moveto(0, 0, scale=1)
+    plot2.moveto(cm2px(figwidth1), 0, scale=1)
+
+    # append plots and labels to figure
+    fig.append([plot1, plot2])
+    # save generated SVG files
+    fig.save(os.path.join(figdir, outfile))
+
+def combine_vertically(figfile1, figfile2, figwidth1, figheight1, figwidth2, figheight2, outfile="out.svg"):
+    #create new SVG figure
+    fig = sg.SVGFigure(str(max(figwidth1, figwidth2))+"cm", str(figheight1+figheight2)+"cm")
+    savedir = os.path.dirname(figfile1)
+    # load matpotlib-generated figures
+    fig1 = sg.fromfile(figfile1)
+    fig2 = sg.fromfile(figfile2)
+    # get the plot objects
+    plot1 = fig1.getroot()
+    plot2 = fig2.getroot()
+    plot1.moveto(0, 0, scale=1)
+    plot2.moveto(0, cm2px(figheight1), scale=1)
+
+    # append plots and labels to figure
+    fig.append([plot1, plot2])
+    # save generated SVG files
+    fig.save(os.path.join(figdir, outfile))
+    
+def generate_skeltonSVG(fname, w, h, label="X", loc=(15, 20), labelsize=12):
+    Figure(str(w)+"cm", str(h)+"cm",
+           Panel(Text(label, x=loc[0], y=loc[1], weight="bold", size=labelsize))
+          ).save(fname)
+#     fig = sg.SVGFigure(str(w)+"cm", str(h)+"cm")
+#     # get the plot objects
+#     plot1 = fig.getroot()
+#     # save generated SVG files
+#     fig.save(fname)
+#     add_label(fname, w, h, label, loc=loc, labelsize=labelsize)
+    
+    
+# this script assumes that every figures locate in the same place
+# figdir = "../doc/paper/figures/figure2"
+# it's saved into sequence dir!
+
+# Import other modules
+import numpy as np
+import pandas as pd
+
+# Set default colorpallet
+sns.set_palette("colorblind")
+# show color palette
+
+
+# In[22]:
+
+
+
+# In[23]:
+
+def ret_dotdot(path, up=1):
+    original_path = os.getcwd()
+    os.chdir(path)
+    for i in range(up):
+        os.chdir("..")
+    ret_dir = os.getcwd()
+    os.chdir(original_path)
+    return ret_dir
+
+def load_copra_data(rf, drop=3):
+    data = []
+    for line in open(rf,'r').readlines():
+        tmp = [int(l) for l in line[:-2].split(' ')]
+        if len(tmp) >= drop:
+            data.append([int(l)-1 for l in line[:-2].split(' ')])
+    return data
+
+def ret_reference_points_list(correspondence_table_time, data, binsize):
+    reference_points_list = []
+    for d in data:
+        reference_points_list.append(correspondence_table_time[np.array(d)] / (10**int(3-np.log10(binsize))))
+    reference_points_list = np.array(reference_points_list)
+    return reference_points_list
+
+def ret_coo_matrix_from_data(data):
+    return coo_matrix((data["data"], (data["row"], data["col"])))
+
+def ret_data(clusters_dir):
+    # read data from clusters_dir
+    rf = os.path.join(clusters_dir, "best-clusters-rereduced_simmat.mtx")
+    data = load_copra_data(rf, drop=3)
+    correspondence_table_time = np.load(os.path.join(clusters_dir, "correspondence_table_time.npz"))["arr_0"] - 1
+    # read data from simmat_dir    
+    simmat_dir = ret_dotdot(clusters_dir)
+    simmat_data = np.load(os.path.join(simmat_dir, "simmat_coo.npz"))
+    params = np.load(os.path.join(simmat_dir, "parameters.npz"))
+    # read data from binarray_dir        
+    binarray_dir = ret_dotdot(simmat_dir)
+    binarray_data = np.load(os.path.join(binarray_dir, "binarray_data.npz"))
+    binsize = int(binarray_data["binsize(ms)"])
+    reference_points_list = ret_reference_points_list(correspondence_table_time, data, binsize)
+    # read data from session_dir
+    session_dir = ret_dotdot(binarray_dir)
+    act = np.load(os.path.join(session_dir, "activity.npz"))
+    return (data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data)
+
+
+# In[46]:
+
+import click
+import subprocess 
+
+@click.command()
+@click.argument("sequence_dir", type=click.Path(exists=True))
+def cmd(sequence_dir):
+
+    # In[47]:
+
+    import re
+
+
+    # In[48]:
+
+    from itertools import cycle
+    color_palette = cycle(sns.color_palette())
+
+
+    # In[49]:
+
+    figs_dir = os.path.join(sequence_dir,"figs")
+    if not os.path.exists(figs_dir):
+        os.mkdir(figs_dir)
+
+
+    # In[50]:
+    profiles_dir = myutils.ret_dotdot(sequence_dir, 1) 
+    clusters_dir = myutils.ret_dotdot(sequence_dir, 2) 
+
+    (data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data) = ret_data(clusters_dir)
+    binarray_coo = myutils.ret_coo_matrix_from_data(binarray_data)
+    binarray_csc = binarray_coo.tocsc()
+    binarray_csr = binarray_csc.tocsr()
+    activity_dir = myutils.ret_dotdot(clusters_dir, 3)
+    binsize = int(binarray_data["binsize(ms)"])
+    ms_to_num = 1000 // binsize
+    window = int(params["window(ms)"]/binsize)
+    window_s = params["window(ms)"] / 1000
+    color_palette = cycle(sns.color_palette())
+
+    plt.figure(figsize=(10, 5))
+    plt.xlim(0, binarray_csc.shape[1]/ms_to_num + 100)
+    plt.ylim(0-0.5, len(reference_points_list)+0.5)
+    plt.title(re.split(r"\/", clusters_dir)[-1])
+    plt.xlabel("Time(s)")
+    plt.ylabel("Cluster#")
+    for row, reference_points in enumerate(reference_points_list):
+        color_ = next(color_palette)
+        for rp in reference_points:
+            plt.plot(rp, row, marker=".", color=color_)
+    plt.savefig(os.path.join(sequence_dir,"figs", "clusters.png"), format="png")        
+
+
+    profiles_dict = np.load(os.path.join(profiles_dir, "profiles.npz"))
+    sorted_profiles_dict = dict()
+    from scipy.ndimage.measurements import center_of_mass
+
+    for profile_name, profile in profiles_dict.items():
+        plt.figure(figsize=(5, 10))
+        plt.ylabel("ID")
+        plt.title(profile_name)
+        plt.imshow(profile, interpolation="nearest", origin="lower", cmap="jet", aspect="auto")
+        plt.savefig(os.path.join(sequence_dir, "figs", "unsorted_"+profile_name+".png"), format="png")
+        plt.clf()
+        plt.close()
+
+
+    def sort_profile(profile):
+        coms = list()        
+        for row in range(profile.shape[0]):
+            com = center_of_mass(profile[row, :])[0]
+            if not np.isnan(com) and not np.isinf(com):
+                coms.append(int(com))
+            else:
+                coms.append(profile.shape[1]-1)
+        coms = pd.DataFrame({"CoM" : coms})    
+        coms = coms.sort_values(by="CoM")
+        sorted_profile = np.zeros_like(profile)
+        for srow, row in enumerate(coms.index):
+            sorted_profile[srow, :] = profile[row, :]
+        return(coms.index, sorted_profile)
+
+
+    # In[57]:
+
+    sorted_indices_list = list()
+    for profile_name, profile in profiles_dict.items():
+        sil, sorted_profile = sort_profile(profile)
+        sorted_indices_list.append(sil)
+        plt.figure(figsize=(5, 10))    
+        plt.title(profile_name)
+        plt.ylabel("Sorted ID")
+        plt.imshow(sorted_profile, interpolation="nearest", origin="lower", cmap="jet", aspect="auto")
+        plt.savefig(os.path.join(sequence_dir, "figs", "sorted_"+profile_name+".png"), format="png")
+        plt.clf()
+        plt.close()
+
+    # In[59]:
+
+    from itertools import chain
+    (sequence_rows, sequence_cols, profiles, data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data) = myutils.ret_sequences(sequence_dir=sequence_dir)
+    flattened_sequence_rows = list()
+    flattened_sequence_cols = list()
+    for srs, scs in zip(sequence_rows, sequence_cols):
+        flattened_sequence_rows += [sr for sr in chain.from_iterable(srs)]
+        flattened_sequence_cols += [sc for sc in chain.from_iterable(scs)]
+    flattened_sequence_rows = np.array(flattened_sequence_rows)
+    flattened_sequence_cols = np.array(flattened_sequence_cols)
+
+
+    # In[60]:
+
+    figs_dir = os.path.join(sequence_dir,"seq")
+    if not os.path.exists(figs_dir):
+        os.mkdir(figs_dir)
+
+
+    # In[61]:
+
+    rows, cols = binarray_coo.row, binarray_coo.col/ms_to_num
+    color_palette = cycle(sns.color_palette())
+    for clstid, (reference_points, sorted_indices) in enumerate(zip(reference_points_list, sorted_indices_list)):
+        color_ = next(color_palette)
+        for rp in reference_points:
+            rp_int = int(rp*ms_to_num)
+            fig, ax = plt.subplots(1, 1, sharex=True, figsize=(5, 10))
+            fig.suptitle(str(clstid+1)+" "+str(int(np.ceil(rp)))+" s")
+            ax.set_ylim((-0.5, binarray_coo.shape[0]+0.3))
+            ax.set_yticks(np.arange(len(sorted_indices)))
+            ax.set_yticklabels(sorted_indices, fontsize=8)
+            ax.set_xlim((0, window_s))
+            ax.set_xlabel("Time(s)"); ax.set_ylabel("Sorted Neuron #")
+            seq_indices = np.where(np.logical_and(rp <= flattened_sequence_cols, flattened_sequence_cols < rp+window_s))
+            seqcols, seqrows = flattened_sequence_cols[seq_indices]-rp, flattened_sequence_rows[seq_indices]
+            spk_indices = np.where(np.logical_and(rp <= cols, cols < rp+window_s))
+            spkcols, spkrows = cols[spk_indices]-rp, rows[spk_indices]
+            if len(np.unique(seqrows)) <= 3:
+                continue
+            for sorted_id, original_id in enumerate(sorted_indices):
+                indices = np.where(seqrows == original_id)
+                ax.scatter(seqcols[indices], np.ones(len(indices[0]))*sorted_id , alpha=1, color=color_)
+                indices = np.where(spkrows == original_id)
+                ax.scatter(spkcols[indices], np.ones(len(indices[0]))*sorted_id-0.3 , alpha=0.3, color="k")
+            fig.savefig(os.path.join(sequence_dir, "seq", str(clstid+1)+"_"+str(int(np.ceil(rp)))+".png"), format="png")
+            plt.close()
+            plt.cla()
+
+
+    # In[62]:
+
+    figs_dir = os.path.join(sequence_dir,"seq_unsorted")
+    if not os.path.exists(figs_dir):
+        os.mkdir(figs_dir)
+
+    rows, cols = binarray_coo.row, binarray_coo.col/ms_to_num
+    color_palette = cycle(sns.color_palette())
+    for clstid, (reference_points, sorted_indices) in enumerate(zip(reference_points_list, sorted_indices_list)):
+        color_ = next(color_palette)
+        for rp in reference_points:
+            rp_int = int(rp*ms_to_num)
+            fig, ax = plt.subplots(1, 1, sharex=True, figsize=(5, 10))
+            fig.suptitle(str(clstid+1)+" "+str(int(np.ceil(rp)))+" s")
+            ax.set_ylim((-0.5, binarray_coo.shape[0]+0.3))
+            ax.set_xlim((0, window_s))
+            ax.set_xlabel("Time(s)"); ax.set_ylabel("Neuron #")        
+            seq_indices = np.where(np.logical_and(rp <= flattened_sequence_cols, flattened_sequence_cols < rp+window_s))
+            seqcols, seqrows = flattened_sequence_cols[seq_indices]-rp, flattened_sequence_rows[seq_indices]
+            spk_indices = np.where(np.logical_and(rp <= cols, cols < rp+window_s))
+            spkcols, spkrows = cols[spk_indices]-rp, rows[spk_indices]
+            if len(np.unique(seqrows)) <= 5:
+                continue
+            ax.scatter(seqcols, seqrows , alpha=1, color=color_)
+            ax.scatter(spkcols, spkrows-0.3 , alpha=0.3, color="k")
+            fig.savefig(os.path.join(sequence_dir, "seq_unsorted", str(clstid+1)+"_"+str(int(np.ceil(rp)))+".png"), format="png")
+            plt.close()
+            plt.cla()
+
+
+    # In[ ]:
+
+    color_palette = cycle(sns.color_palette())
+    for idx, (seqrows, seqcols) in enumerate(zip(sequence_rows, sequence_cols)):
+        color_ = next(color_palette)
+        rows = np.array([])
+        for sr, sc in zip(seqrows, seqcols):
+            rows = np.concatenate((rows, sr))
+        plt.title("cluster"+str(idx+1))
+        plt.xlabel("Neuron#"); plt.ylabel("Freq")
+    #    plt.xlim(0, 80)#; plt.ylim(0, 120000)
+        plt.hist(rows, bins=np.arange(binarray_coo.shape[0]))
+        plt.savefig(os.path.join(sequence_dir, "figs", "seq_freq"+str(idx+1)+".png"), format="png")
+        plt.close()
+
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()
+
+
+
+

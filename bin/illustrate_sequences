@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+import numpy as np
+import os, sys
+projectdir = os.path.dirname(os.path.dirname(sys.argv[0]))
+print(projectdir)
+sys.path.append(os.path.join(projectdir, "chaldea"))
+sys.path.append(os.path.join(projectdir, "chaldea/utils"))
+print(sys.path)
+import myutils
+import matplotlib
+matplotlib.use("Agg")
+matplotlib.rcParams['svg.fonttype'] = 'none'
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_context("paper", font_scale=2)
+sns.set_style("white")
+import re
+from itertools import cycle
+import datetime
+import scipy.fftpack
+from scipy import signal
+import json
+from pylab import get_cmap
+from scipy import stats
+from itertools import chain
+import pandas as pd
+from itertools import cycle
+from scipy import io
+import matplotlib.gridspec as gridspec
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import os, sys
+import myutils
+# plotly default font
+
+sns.set_palette("colorblind")
+
+from itertools import cycle
+color_palette = cycle(sns.color_palette())
+# Compatible with both Python2 and Python3
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
+
+import click
+import subprocess 
+
+@click.command()
+@click.argument("sequences_dir", type=click.Path(exists=True))
+def cmd(sequences_dir):
+    sys.stdout = mystdout = StringIO()
+    profiles_dir = myutils.ret_dotdot(sequences_dir)
+    clusters_dir = myutils.ret_dotdot(profiles_dir)
+    figdir = profiles_dir
+
+
+    (profiles, data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data) = myutils.ret_data(profiles_dir)
+    binarray_coo = myutils.ret_coo_matrix_from_data(binarray_data)
+    binarray_csc = binarray_coo.tocsc()
+    binarray_csr = binarray_csc.tocsr()
+    rows, cols = binarray_coo.row, binarray_coo.col / 1000
+    simmat_coo = myutils.ret_coo_matrix_from_data(simmat_data)
+    (sequence_rows, sequence_cols, profiles, data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data) = myutils.ret_sequences(sequence_dir=sequences_dir)
+    flattened_sequence_rows = list()
+    flattened_sequence_cols = list()
+    for srs, scs in zip(sequence_rows, sequence_cols):
+        flattened_sequence_rows += [sr for sr in chain.from_iterable(srs)]
+        flattened_sequence_cols += [sc for sc in chain.from_iterable(scs)]
+    flattened_sequence_rows = np.array(flattened_sequence_rows)
+    flattened_sequence_cols = np.array(flattened_sequence_cols)
+
+    colors_list = cycle(sns.color_palette())
+    plt.figure()
+    for seqcols, seqrows in zip(sequence_cols, sequence_rows):
+        color_ = next(colors_list)
+        for seqcol, seqrow in zip(seqcols, seqrows):
+            plt.plot(seqcol, seqrow, color=color_, marker=".", linestyle="")
+    plt.savefig(os.path.join(sequences_dir, "ex_seq.png"))
+    sys.stdout = sys.__stdout__
+    print("Result is saved in ", sequences_dir)
+
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()

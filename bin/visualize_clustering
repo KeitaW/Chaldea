@@ -1,0 +1,137 @@
+#!/usr/bin/env python
+
+import numpy as np
+import scipy as sp
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_style("whitegrid")
+sns.set_style({"grid.linestyle": ""})
+sns.set_context("paper", font_scale=2)
+import re
+import datetime
+import scipy.fftpack
+from scipy import signal
+import json
+from pylab import get_cmap
+from scipy import stats
+from itertools import chain
+import pandas as pd
+from itertools import cycle
+from scipy import io
+import matplotlib.gridspec as gridspec
+from sklearn.manifold import Isomap
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import os, sys
+sys.path.append("../lib/utils/")
+import myutils
+sys.path.append("../lib")
+# plotly default font
+
+
+import click
+import subprocess 
+
+@click.command()
+@click.argument("cluster_dir", type=click.Path(exists=True))
+def cmd(cluster_dir):
+    def ret_dotdot(path, up=1):
+        original_path = os.getcwd()
+        os.chdir(path)
+        for i in range(up):
+            os.chdir("..")
+        ret_dir = os.getcwd()
+        os.chdir(original_path)
+        return ret_dir
+
+    def load_copra_data(rf, drop=3):
+        data = []
+        for line in open(rf,'r').readlines():
+            tmp = [int(l) for l in line[:-2].split(' ')]
+            if len(tmp) >= drop:
+                data.append([int(l)-1 for l in line[:-2].split(' ')])
+        return data
+
+    def ret_reference_points_list(correspondence_table_time, data, binsize):
+        reference_points_list = []
+        for d in data:
+            reference_points_list.append(correspondence_table_time[d] / (1000//binsize))
+        reference_points_list = np.array(reference_points_list)
+        return reference_points_list
+
+    def ret_coo_matrix_from_data(data):
+        return coo_matrix((data["data"], (data["row"], data["col"])))
+
+    def ret_data(cluster_dir):
+        # read data from cluster_dir
+        rf = os.path.join(cluster_dir, "best-clusters-rereduced_simmat.mtx")
+        data = load_copra_data(rf, drop=3)
+        correspondence_table_time = np.load(os.path.join(cluster_dir, "correspondence_table_time.npz"))["arr_0"] - 1
+        # read data from simmat_dir    
+        simmat_dir = ret_dotdot(cluster_dir)
+        simmat_data = np.load(os.path.join(simmat_dir, "simmat_coo.npz"))
+        params = np.load(os.path.join(simmat_dir, "parameters.npz"))
+        # read data from binarray_dir        
+        binarray_dir = ret_dotdot(simmat_dir)
+        binarray_data = np.load(os.path.join(binarray_dir, "binarray_data.npz"))
+        binsize = int(binarray_data["binsize(ms)"])
+        reference_points_list = ret_reference_points_list(correspondence_table_time, data, binsize)
+        # read data from session_dir
+        session_dir = ret_dotdot(binarray_dir)
+        act = np.load(os.path.join(session_dir, "activity.npz"))
+        return (data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data, binsize)
+
+    (data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data, binsize) = ret_data(cluster_dir)
+    binarray_coo = myutils.ret_coo_matrix_from_data(binarray_data)
+    binarray_csc = binarray_coo.tocsc()
+    binarray_csr = binarray_csc.tocsr()
+    activity_dir = myutils.ret_dotdot(cluster_dir, 3)
+
+    plt.figure(figsize=(30, 30))
+    rereduced_simmat = io.mmread(os.path.join(cluster_dir, "rereduced_simmat.mtx")).toarray()
+    rereduced_distmat = rereduced_simmat.max() - rereduced_simmat
+    plt.imshow(rereduced_simmat, interpolation="nearest", cmap="jet")
+    plt.savefig(os.path.join(cluster_dir , "imshow.png"), format = 'png', dpi=300)
+    plt.clf()
+    from sklearn.manifold import TSNE, MDS
+    tsne = TSNE(n_components=2, metric="precomputed")
+    X = tsne.fit_transform(rereduced_distmat)
+    rf = os.path.join(cluster_dir, "best-clusters-rereduced_simmat.mtx")
+    clust_data_list = myutils.load_copra_data(rf)
+
+    color_palette = cycle(sns.color_palette())
+    for idx, clust_data in enumerate(clust_data_list):
+        color_ = next(color_palette)
+        for clust in clust_data:
+            plt.plot(X[clust, 0]+np.random.random()*0.5, X[clust, 1]+np.random.random()*0.5, color=color_, marker="o", alpha=.5, markersize=10) 
+    plt.savefig(os.path.join(cluster_dir , "tSNE.png"), format = 'png', dpi=100)
+    plt.clf()
+    #mds = MDS(n_components=2, max_iter=500,dissimilarity="precomputed", n_jobs=1)
+    #X = mds.fit(rereduced_distmat).embedding_
+    #color_palette = cycle(sns.color_palette())
+    #for idx, clust_data in enumerate(clust_data_list):
+    #    color_ = next(color_palette)
+    #    for clust in clust_data:
+    #        plt.plot(X[clust, 0]+np.random.random()*0.5, X[clust, 1]+np.random.random()*0.5, color=color_, marker="o", alpha=.5, markersize=10) 
+    #plt.savefig(os.path.join(cluster_dir , "MDS.png"), format = 'png', dpi=100)
+
+    plt.figure(figsize=(10, 5))
+    #plt.xlim(0, binarray_csc.shape[1]/num_to_s + 100)
+    plt.ylim(0-0.5, len(reference_points_list)+0.5)
+    plt.title(re.split(r"\/", cluster_dir)[-1])
+    plt.xlabel("Time(s)")
+    plt.ylabel("Cluster#")
+    color_palette = cycle(sns.color_palette())
+    print(reference_points_list)
+    for row, reference_points in enumerate(reference_points_list):
+        color_ = next(color_palette)
+        for rp in reference_points:
+            plt.plot(rp, row, marker=".", color=color_)
+    plt.savefig(os.path.join(cluster_dir , "clusters.png"), format = 'png', dpi=100)
+
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()

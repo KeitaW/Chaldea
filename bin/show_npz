@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+
+import click
+import subprocess 
+import os
+import numpy as np
+@click.command()
+@click.argument("npzfile", type=click.Path(exists=True))
+def cmd(npzfile):
+    print(np.load(npzfile).items())
+
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()

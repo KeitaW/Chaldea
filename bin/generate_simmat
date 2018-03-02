@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+
+import click
+import subprocess 
+import os
+import sys
+from multiprocessing import cpu_count
+@click.command()
+@click.argument("binarray_file", type=click.Path(exists=True))
+@click.option("--a", type=float, default=0.05, help="Strength of exponentially growing gap penalty. Default value is 0.05 (ms).")
+@click.option("--p", type=int, default=cpu_count(), help="Number of parallel jobs. Default value is multiprocessing.cpu_count().")
+@click.option("--window", type=int, help="Width(ms) of sliding time window.")
+@click.option("--slide", type=str, default="half", help="Slide width of a time window. all(=size of time window) or half. Default is half")
+@click.option("--mlenseq", type=int, default=5, help="User specified minimum length of sequence. Default value is 5")
+@click.option("--exhaustive", is_flag=True, help="Generate similarity matrix without pre-process. This may take very long execution time.")
+@click.option("--background", is_flag=True, help="Run this command in background mode if this option is specified")
+@click.option("--cluster", is_flag=True, help="Run this command in computer cluster mode if this option is specified")
+@click.option("--host", type=str, default="all.q", help="Run this command in computer cluster mode if this option is specified")
+def cmd(binarray_file, p, a, window, slide, mlenseq, exhaustive, background, cluster):
+    scriptdir = os.path.dirname(sys.argv[0])
+    binarray_file = os.path.abspath(binarray_file)
+    binarray_dir  = os.path.dirname(binarray_file)
+    datadir = os.path.dirname(binarray_file)
+    jlscript  = os.path.join(
+           scriptdir, "pmap_cal_simmat.jl")
+    jobscript = os.path.join(
+           scriptdir, "cluster", "generate_jobscript.sh")
+    os.chdir(scriptdir)
+    if window is None:
+        raise click.BadParameter("Window is requed. See --help for detail.")
+    if slide not in ["half", "all"]:
+        raise click.BadParameter("slide should be \"half\" or \"all\"")
+    if exhaustive:
+        exflag = 1
+    else:
+        exflag = 0
+    if background:
+        subprocess.Popen(
+                ['nohup', "julia", "-p", str(p), jlscript, binarray_file, str(a), str(window), slide, str(mlenseq), str(exflag)],
+                stdout=open('out.log', 'w'),
+                stderr=open('err.log', 'w'),
+                preexec_fn=os.setpgrp)
+    elif cluster:
+        os.chdir("cluster")
+        print(subprocess.check_output(["bash", jobscript, binarray_file, str(window), str(a), slide, str(p),  str(mlenseq), str(exflag), host]).decode("utf-8"))
+        os.chdir("..")
+    else:
+        print(subprocess.check_output(["julia", "-p", str(p), jlscript, binarray_file, str(a), str(window), slide, str(mlenseq), str(exflag)]).decode("utf-8"))
+
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()

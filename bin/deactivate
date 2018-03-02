@@ -1,0 +1,5 @@
+#!/bin/bash
+
+export PATH=$_OLD_PATH
+export PS1=$_OLD_VIRTUAL_PS1
+unset ACTIVEFLAG

@@ -1,0 +1,26 @@
+#!/bin/bash 
+
+if [ ! -z ${ACTIVEFLAG+x} ] ; then    # return x only when VAR is defined test it with -z
+	echo "Already activated... exit"
+	return 1
+fi
+# https://stackoverflow.com/questions/3572030/bash-script-absolute-path-with-osx
+# as usual SCRIPT_DIR=$(cd $(dirname $0); pwd) not working correctly in OSX (it contains PROMPT for some reason...)
+realpath() {
+    [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
+}
+
+export ACTIVEFLAG=1
+export CHALDEADIR=$(dirname $(dirname $(realpath "$0")))
+export PATH=$PATH:$CHALDEADIR/bin
+# current environments are stored for deactivation
+export _OLD_PATH="$PATH"
+export _OLD_VIRTUAL_PS1="$PS1"
+
+
+if [ "x" != x ] ; then
+PS1="$PS1"
+else
+PS1="(Active) $PS1"
+fi
+export PS1

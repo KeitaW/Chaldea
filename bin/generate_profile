@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+
+import numpy as np
+import sys, os
+import datetime
+import subprocess
+from scipy import io
+from scipy.sparse import lil_matrix, coo_matrix
+scriptdir  = os.path.dirname(os.path.abspath(sys.argv[0]))
+projectdir = os.path.dirname(scriptdir)
+sys.path.append(os.path.join(projectdir, "chaldea"))
+from OpticsAutomaticClustering import *
+# Compatible with both Python2 and Python3
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
+
+import click
+import subprocess 
+
+@click.command()
+@click.argument("cluster_file", type=click.Path(exists=True))
+@click.option("--p", type=int, default=1, help="Number of parallel jobs. Default value is 1. Same number as the number of clusters are recommended.")
+@click.option("--niter", type=int, default=1000, help="Maximum number of iteration for profile update. Default value is 1000.")
+@click.option("--min_num_seq", type=int, default=1, help="Minimum number of data points of a cluster. Clusters which have small number of data points than this will not be calculated.")
+@click.option("--background", is_flag=True, help="Run this command in background mode if this option is specified")
+def cmd(cluster_file, p, niter, min_num_seq, background):
+    cluster_dir = os.path.dirname(os.path.abspath(cluster_file))
+    jlscript  = os.path.join(
+           scriptdir, "pmap_cal_profiles.jl")
+    os.chdir(scriptdir)
+    if background:
+        subprocess.Popen(
+                ['nohup', "julia", "-p", str(p), jlscript, cluster_dir,  str(niter), str(min_num_seq)],
+                stdout=open('out.log', 'w'),
+                stderr=open('err.log', 'w'),
+                preexec_fn=os.setpgrp)
+    else:
+        print(subprocess.check_output(["julia", "-p", str(p), jlscript, cluster_dir,  str(niter), str(min_num_seq)]).decode("utf-8"))
+    print(cluster_dir)
+
+def main():
+    print("This command assumes best-cluscers-rereduced_simmat.mtx as its input.")
+    cmd()
+if __name__ == '__main__':
+    main()

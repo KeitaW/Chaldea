@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+import os, sys
+sys.path.append("../lib/utils/")
+import myutils
+sys.path.append("../lib")
+import numpy as np
+import datetime
+
+import click
+import subprocess 
+
+@click.command()
+@click.argument("sequence_dir", type=click.Path(exists=True))
+def cmd(sequence_dir):
+    profiles_dir = myutils.ret_dotdot(sequence_dir, 1)
+    clusters_dir = myutils.ret_dotdot(sequence_dir, 2)
+    d = datetime.datetime.today()
+    save_dir = os.path.join(clusters_dir, "denoised_profile_"+d.strftime("%y%m%dT%H%M%S"))
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
+
+    (sequence_rows, sequence_cols, profiles, data, correspondence_table_time, reference_points_list, simmat_data, params, binarray_data) = myutils.ret_sequences(sequence_dir=sequence_dir)    
+    binarray_coo = myutils.ret_coo_matrix_from_data(binarray_data)
+    profiles_dict = np.load(os.path.join(profiles_dir, "profiles.npz"))
+
+    from itertools import chain
+
+    denoised_profiles_dict = dict()
+    bins = np.arange(0, binarray_coo.shape[0]+1)
+    for profile_name, profile in profiles_dict.items():
+        sequence_row = sequence_rows[int(profile_name[-1])-1]
+        flattened_sequence_rows = np.array([sr for sr in chain.from_iterable(sequence_row)])
+        hist = np.histogram(flattened_sequence_rows, bins = bins, normed=True)[0]
+        profile_ = profile.copy()
+        for row in range(profile.shape[0]):
+            profile_[row, :] *= hist[row]
+        profile_ = (profile_ - np.min(profile_)) / (np.max(profile_) - np.min(profile_))
+        denoised_profiles_dict[profile_name] = profile_
+
+    np.savez(os.path.join(save_dir, "profiles.npz"), **denoised_profiles_dict)
+    with open(os.path.join(save_dir, "log.txt"), 'a') as wf:
+        wf.write("from: "+str(sequence_dir))
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()

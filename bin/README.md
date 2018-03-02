@@ -1,0 +1,3 @@
+# ざっくりした解析の流れ
+init\_topdir\_*.py -> add\_a\_session\_*.py -> generate\_binarray.py -> smp\_cal\_simmat.jl
+みたいな感じでSessionに対応したデータを作る部分以降はスクリプトを共通化する方針で...

@@ -1,0 +1,83 @@
+#!/usr/bin/env python
+
+import numpy as np
+import sys, os
+import datetime
+import pandas as pd
+import subprocess
+from scipy.sparse import coo_matrix, lil_matrix
+import click
+sys.path.append("../lib/utils")
+from myutils import ret_coo_matrix_from_data, ret_dotdot
+
+
+# Compatible with both Python2 and Python3
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
+import sys
+
+def sample_from_interval(T, num_sample):
+    """
+    take num_sample samples from [0, T]
+    """
+    return(T*np.random.random(int(num_sample)))
+
+def shuffle_binarray_coo(binarray_coo, bin_size):
+    """
+    Shuffled coo_matrix will be returned
+    """
+    nrow, ncol = binarray_coo.shape
+    row, col, data  = binarray_coo.row, binarray_coo.col, binarray_coo.data
+    duration_ms = ncol // bin_size
+    nneuron = nrow
+    spike_counts = [np.sum(data[row == neuron_id]) for neuron_id in range(row.max()+1)]
+    shuffled_spike_trains = [sample_from_interval(duration_ms, sc) for sc in spike_counts]
+    bins = np.arange(0, duration_ms * bin_size, bin_size)
+    shuffled_binarray_lil = lil_matrix((nrow, ncol))
+    neuronid = 0
+    for neuronid in range(nneuron):
+        spike_train_of_a_neuron = shuffled_spike_trains[neuronid]
+        digitized_spike_train_of_a_neuron = np.digitize(spike_train_of_a_neuron, bins) - 1
+        print(digitized_spike_train_of_a_neuron)
+        binned_spike_train_of_a_neuron = np.bincount(digitized_spike_train_of_a_neuron)
+        shuffled_binarray_lil[neuronid, digitized_spike_train_of_a_neuron] = binned_spike_train_of_a_neuron[digitized_spike_train_of_a_neuron]
+    return(shuffled_binarray_lil.tocoo())
+
+@click.command()
+@click.argument("binarray_dir", type=click.Path(exists=True))
+@click.option("--binwidth", type=int, default=1, help="bin-width(ms). Default value is 1 (ms).")
+def cmd(binarray_dir, binwidth):
+    """
+    Causion: Following bug is remained: total number of spikes may decrease when binwidth != 1
+    """
+    # Redirect stdout to mystdout variable for logging.
+    sys.stdout = mystdout = StringIO()
+    save_dir = binarray_dir
+    bin_size = binwidth
+    bin_size = 1
+    binarray_data = np.load(os.path.join(binarray_dir, "binarray_data.npz"))
+    binarray_coo = ret_coo_matrix_from_data(binarray_data)
+    binarray_csc = binarray_coo.tocsc()
+    binarray_csr = binarray_csc.tocsr()
+    shuffled_binarray_coo = shuffle_binarray_coo(binarray_coo, bin_size)
+    binarray_data = {
+        "row": shuffled_binarray_coo.row,
+        "col": shuffled_binarray_coo.col,
+        "data": shuffled_binarray_coo.data,
+        "binsize(ms)": bin_size,
+        "duration(ms)": int(shuffled_binarray_coo.shape[1]*bin_size)
+    }
+    np.savez(os.path.join(save_dir, "shuffled_binarray_data.npz"), **binarray_data)
+    with open(os.path.join(save_dir, "log.txt"), "w") as wf:
+        wf.write("GitHEAD_ID: "+subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8"))
+        wf.write("GeneratedFrom: "+sys.argv[0]+"\n")
+        # Add meta data to the save_file
+        wf.write(mystdout.getvalue())
+    sys.stdout = sys.__stdout__
+
+def main():
+    cmd()
+if __name__ == '__main__':
+    main()
