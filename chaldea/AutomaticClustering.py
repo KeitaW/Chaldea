@@ -1,4 +1,7 @@
 '''
+The following code retrieved from the following repo.
+https://github.com/amyxzhang/OPTICS-Automatic-Clustering/blob/master/AutomaticClustering.py
+
 Automatic Clustering of Hierarchical Clustering Representations
  
 Library Dependencies: numpy, if graphing is desired - matplotlib

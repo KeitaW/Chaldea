@@ -1,4 +1,4 @@
-# Below script is based on the following code
+# Below script is retrieved from,
 # https://github.com/espg/OPTICS/blob/master/OPTICS.py
 ###################################
 ##  Written by Shane Grigsby     ##

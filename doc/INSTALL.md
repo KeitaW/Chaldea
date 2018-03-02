@@ -7,14 +7,12 @@ I'm testing this software on OSX and CentOS7.
 
 # Dependency
 This software using following two algorithm for clustering steps. They are based on existing scripts.
-Please do not distribute this software as following no-lisence codes are already installed.
 * OPTICS
 Modified version of following two scripts are in this software (I may rewrite by myself later).
 https://github.com/espg/OPTICS/blob/master/OPTICS.py
 https://github.com/amyxzhang/OPTICS-Automatic-Clustering
 * COPRA
-The following software is used without any modification (I've just wrote a rapper). I'll write a script that let users automatically download the following jar file and delete it from our repo.
-Software http://gregory.org/research/networks/software/copra.jar
+The following software is used without any modification (I've just wrote a wrapper). Software http://gregory.org/research/networks/software/copra.jar
 Manual
 http://gregory.org/research/networks/software/copra-guide.pdf
 
