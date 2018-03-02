@@ -16,7 +16,7 @@ from multiprocessing import cpu_count
 @click.option("--background", is_flag=True, help="Run this command in background mode if this option is specified")
 @click.option("--cluster", is_flag=True, help="Run this command in computer cluster mode if this option is specified")
 @click.option("--host", type=str, default="all.q", help="Run this command in computer cluster mode if this option is specified")
-def cmd(binarray_file, p, a, window, slide, mlenseq, exhaustive, background, cluster):
+def cmd(binarray_file, p, a, window, slide, mlenseq, exhaustive, background, cluster, host):
     scriptdir = os.path.dirname(sys.argv[0])
     binarray_file = os.path.abspath(binarray_file)
     binarray_dir  = os.path.dirname(binarray_file)
