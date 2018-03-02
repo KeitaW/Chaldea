@@ -1,7 +1,12 @@
-# Installation
-See [Installing this library](install.md).
-# Brief tutorial
+# Chaldea
+CLI tools for sequential activity detection in neuronal data.
+## Requirements
+* Python 3
+* Julia 0.6
+* openjdk "1.8.x"
 
+## Brief tutorial
+Following contents are old and need to be fixed.
 ## Store your data into __data__ directory
 You need to store your data in __data__ directory. You need two different file for one experiment.
 * clu: contain neuron indices. The first row is the number of neurons in it.
