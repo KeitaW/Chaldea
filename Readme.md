@@ -1,6 +1,9 @@
 # Chaldea
 CLI tools for sequential activity detection in neuronal data.
 Algorithms are described in [bioRxiv paper](https://www.biorxiv.org/content/early/2017/10/30/202655).
+Please cite the publication if you publish paper with this tools.
+
+Watanabe, K., Haga, T., Euston, D. R., Tatsuno, M., & Fukai, T. (2017). Unsupervised detection of cell-assembly sequences with edit similarity score. bioRxiv, 202655. http://doi.org/10.1101/202655
 ## Requirements
 * Python 3
 * Julia 0.6
