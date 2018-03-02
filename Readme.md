@@ -1,5 +1,6 @@
 # Chaldea
 CLI tools for sequential activity detection in neuronal data.
+Algorithms are described in [bioRxiv paper](https://www.biorxiv.org/content/early/2017/10/30/202655).
 ## Requirements
 * Python 3
 * Julia 0.6
