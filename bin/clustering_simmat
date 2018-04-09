@@ -22,13 +22,14 @@ import subprocess
 @click.command()
 @click.argument("simmat_file", type=click.Path(exists=True))
 @click.option("--MinPts", type=int, default=10, help="MinPts used in OPTICS.")
+@click.option("--epsilon", type=float, default=None, help="Epsilon used in OPTICS.")
 @click.option("--v", type=int, default=2, help="v used in COPRA.")
-def cmd(simmat_file, minpts, v):
+def cmd(simmat_file, minpts, epsilon, v):
     #sys.stdout = mystdout = StringIO()
     d = datetime.datetime.today()
     simmat_file = os.path.abspath(simmat_file)
     simmat_dir  = os.path.dirname(simmat_file)
-    save_dir    = os.path.join(simmat_dir, "clusters_MinPts"+str(minpts)+"_v"+str(v)+"_"+d.strftime("%y%m%dT%H%M%S"))
+    save_dir    = os.path.join(simmat_dir, "clusters_MinPts"+str(minpts)+"_eps"+str(epsilon)+"_v"+str(v)+"_"+d.strftime("%y%m%dT%H%M%S"))
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
     prev_wd = os.getcwd() 
@@ -92,11 +93,17 @@ def cmd(simmat_file, minpts, v):
     print(reduced_simmat)
     # 距離行列を定義しておく．Opticsで用いるため
     reduced_distmat = (1 / (1 + reduced_simmat))
+    # reduced_distmat = reduced_simmat.max() - reduced_simmat
     # distmat = simmat.max() - simmat
     print("OPTICS start")
-    optics = OpticsAutomaticClustering(smoothing=1,
-                                       epsilon=reduced_distmat.max(),
-                                       MinPts=minpts)
+    if epsilon == None:
+        optics = OpticsAutomaticClustering(smoothing=1,
+                                           epsilon=reduced_distmat.max(),
+                                           MinPts=minpts)
+    else:
+        optics = OpticsAutomaticClustering(smoothing=1,
+                                           epsilon=epsilon,
+                                           MinPts=minpts)
     optics.fit(reduced_distmat)
     core_samples = list()
     for sample_array in optics.core_samples:
